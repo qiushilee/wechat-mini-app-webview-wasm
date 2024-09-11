@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      img {
+        visibility: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas width="1299" height="1910" id="c-wasm"></canvas>
+    <canvas width="1299" height="1910" id="c2"></canvas>
+    <p id="status">OpenCV.js is loading...</p>
+    <div>
+      <div class="inputoutput">
+        <img id="imageSrc" alt="No Image" />
+        <div class="caption">
+          imageSrc <input type="file" id="fileInput" name="file" />
+        </div>
+      </div>
+      <div class="inputoutput">
+        <canvas id="canvasOutput"></canvas>
+        <div class="caption">canvasOutput</div>
+      </div>
+    </div>
+    <img src="./img2.png" alt="" srcset="" id="img" />
+    <script src="./opencv.js"></script>
+    <script src="./buffer-polygon-geos-wasm.js" type="module"></script>
+    <script type="text/javascript">
+      let imgElement = document.getElementById("imageSrc");
+      let inputElement = document.getElementById("fileInput");
+      inputElement.addEventListener(
+        "change",
+        (e) => {
+          imgElement.src = URL.createObjectURL(e.target.files[0]);
+        },
+        false
+      );
+
+      imgElement.onload = function () {
+        let mat = cv.imread(imgElement);
+        cv.imshow("canvasOutput", mat);
+        mat.delete();
+      };
+
+      var Module = {
+        onRuntimeInitialized() {
+          document.getElementById("status").innerHTML = "OpenCV.js is ready.";
+        },
+      };
+
+      const img = document.querySelector("#img");
+      setTimeout(() => {
+        console.time("img");
+        console.time("1");
+        console.time("2");
+        let src = cv.imread(img, cv.IMREAD_UNCHANGED);
+        let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
+        cv.cvtColor(src, src, cv.COLOR_BGR2GRAY, 0);
+        console.timeEnd("2");
+        console.time("3");
+        // 阈值
+        cv.equalizeHist(src, src);
+        cv.adaptiveThreshold(
+          src,
+          src,
+          255,
+          cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+          cv.THRESH_BINARY_INV,
+          11,
+          2
+        );
+        const kernel = new cv.Mat(5, 5, cv.CV_8U, new cv.Scalar(1));
+        cv.morphologyEx(src, src, cv.MORPH_CLOSE, kernel);
+
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(
+          src,
+          contours,
+          hierarchy,
+          cv.RETR_EXTERNAL,
+          cv.CHAIN_APPROX_SIMPLE
+        );
+        console.timeEnd("3");
+
+        let max = 0;
+        let maxContour = contours.get(0);
+        let maxArea = cv.contourArea(maxContour);
+        for (let i = 1; i < contours.size(); i++) {
+          let contour = contours.get(i);
+          let area = cv.contourArea(contour);
+          if (area > maxArea) {
+            maxContour = contour;
+            maxArea = area;
+            max = i;
+          }
+        }
+        let epsilon = 0.0001 * cv.arcLength(maxContour, true);
+        let polygon = new cv.Mat();
+        cv.approxPolyDP(maxContour, polygon, epsilon, true);
+        // console.log(contours, polygon, max);
+        console.timeEnd("1");
+
+        if (true) {
+          for (let i = 0; i < contours.size(); ++i) {
+            let color = new cv.Scalar(0, 255, 0);
+            cv.drawContours(
+              dst,
+              contours,
+              i,
+              color,
+              1,
+              cv.LINE_8,
+              hierarchy,
+              100
+            );
+          }
+        }
+
+        drawPolygon(polygon);
+
+        let wkt = "";
+        const pts = [];
+        for (let i = 0; i < polygon.rows; ++i) {
+          const [x, y] = polygon.intPtr(i, 0);
+          wkt += `${x} ${y}, `;
+          pts.push({ x, y });
+        }
+        wkt = `POLYGON ((${wkt.slice(0, wkt.length - 2)}, 847 188))`;
+
+        cv.imshow("canvasOutput", dst);
+        src.delete();
+        dst.delete();
+        contours.delete();
+        hierarchy.delete();
+        bufferPolygonGeosWASM(wkt);
+        console.timeEnd("img");
+      }, 500);
+
+      function drawPolygon(polygonList) {
+        const canvas = document.querySelector("#c2");
+        const ctx = canvas.getContext("2d");
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        if (polygonList.rows) {
+          for (let i = 0; i < polygonList.rows; ++i) {
+            const [x, y] = polygonList.intPtr(i, 0);
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+        } else {
+          polygonList.forEach(({ x, y }, i) => {
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          });
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+    </script>
+  </body>
+</html>
