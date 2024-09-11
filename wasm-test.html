@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM Test</title>
+</head>
+<body>
+    <h1>WASM Test</h1>
+    <button id="runWasm">Run WASM</button>
+    <p id="result"></p>
+
+    <script src="add.js"></script>
+    <script>
+        // Ensure the WebAssembly module is loaded
+        Module.onRuntimeInitialized = () => {
+            document.getElementById('runWasm').addEventListener('click', () => {
+                // Call the add function from the WASM module
+                const result = Module._add(5, 3);
+                document.getElementById('result').textContent = 'Result of add(5, 3): ' + result;
+            });
+        };
+    </script>
+</body>
+</html>
